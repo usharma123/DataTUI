@@ -1,7 +1,9 @@
 import { nanoid } from 'nanoid';
 import type { Column, QueryResult } from '../engines/duckdb';
 
-export type ArtifactType = 'table' | 'plot' | 'text';
+export type ArtifactType = 'table' | 'plot' | 'text' | 'chart';
+
+export type ChartType = 'bar' | 'line' | 'histogram' | 'pie' | 'scatter';
 
 export interface TableArtifact {
   id: string;
@@ -30,7 +32,17 @@ export interface TextArtifact {
   createdAt: Date;
 }
 
-export type Artifact = TableArtifact | PlotArtifact | TextArtifact;
+export interface ChartArtifact {
+  id: string;
+  type: 'chart';
+  chartType: ChartType;
+  title?: string;
+  lines: string[]; // Pre-rendered ASCII lines
+  sourceArtifactId: string; // The table artifact this was generated from
+  createdAt: Date;
+}
+
+export type Artifact = TableArtifact | PlotArtifact | TextArtifact | ChartArtifact;
 
 export interface TablePage {
   rows: unknown[][];
@@ -86,6 +98,26 @@ export class ArtifactStore {
     return artifact;
   }
 
+  storeChart(
+    chartType: ChartType,
+    lines: string[],
+    sourceArtifactId: string,
+    title?: string
+  ): ChartArtifact {
+    const id = `cht_${nanoid(8)}`;
+    const artifact: ChartArtifact = {
+      id,
+      type: 'chart',
+      chartType,
+      title,
+      lines,
+      sourceArtifactId,
+      createdAt: new Date(),
+    };
+    this.artifacts.set(id, artifact);
+    return artifact;
+  }
+
   get(id: string): Artifact | undefined {
     return this.artifacts.get(id);
   }
@@ -93,6 +125,14 @@ export class ArtifactStore {
   getTable(id: string): TableArtifact | undefined {
     const artifact = this.artifacts.get(id);
     if (artifact?.type === 'table') {
+      return artifact;
+    }
+    return undefined;
+  }
+
+  getChart(id: string): ChartArtifact | undefined {
+    const artifact = this.artifacts.get(id);
+    if (artifact?.type === 'chart') {
       return artifact;
     }
     return undefined;

@@ -21,6 +21,14 @@ export interface DatasetInfo {
   rowCount: number;
 }
 
+// Convert BigInt values to numbers (DuckDB returns BigInt for COUNT, SUM, etc.)
+function convertValue(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+  return value;
+}
+
 export class DuckDBEngine {
   private db: duckdb.Database;
   private conn: duckdb.Connection;
@@ -59,8 +67,8 @@ export class DuckDBEngine {
           type: typeof result[0][name],
         }));
 
-        // Convert to rows
-        const rows = result.map((row) => Object.values(row));
+        // Convert to rows, converting BigInt to Number
+        const rows = result.map((row) => Object.values(row).map(convertValue));
 
         resolve({ columns, rows });
       });
@@ -95,9 +103,10 @@ export class DuckDBEngine {
       type: row[1] as string,
     }));
 
-    // Get row count
+    // Get row count (convert BigInt to Number if needed)
     const countResult = await this.runQuery(`SELECT COUNT(*) as count FROM "${alias}"`);
-    const rowCount = (countResult.rows[0]?.[0] as number) ?? 0;
+    const rawCount = countResult.rows[0]?.[0];
+    const rowCount = typeof rawCount === 'bigint' ? Number(rawCount) : (rawCount as number) ?? 0;
 
     const info: DatasetInfo = {
       alias,

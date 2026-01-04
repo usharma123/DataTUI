@@ -6,6 +6,7 @@ import {
   TextRenderable,
   InputRenderable,
 } from '@opentui/core';
+import { renderMarkdown } from './components/markdown';
 
 // Color palette
 export const Colors = {
@@ -20,6 +21,9 @@ export const Colors = {
   assistant: RGBA.fromHex('#a5d6a7'),
   statusBg: RGBA.fromHex('#1a1a24'),
   warning: RGBA.fromHex('#fbbf24'),
+  error: RGBA.fromHex('#ef4444'),
+  success: RGBA.fromHex('#22c55e'),
+  toolRunning: RGBA.fromHex('#f59e0b'),
 };
 
 export interface LayoutComponents {
@@ -27,6 +31,7 @@ export interface LayoutComponents {
   chatPane: ScrollBoxRenderable;
   chatInput: InputRenderable;
   artifactPane: ScrollBoxRenderable;
+  artifactContainer: BoxRenderable;
   statusBar: BoxRenderable;
   statusText: TextRenderable;
 }
@@ -128,7 +133,7 @@ export function createLayout(renderer: CliRenderer): LayoutComponents {
     content: 'No artifacts yet. Load a dataset to get started.',
     width: '100%',
   });
-  artifactPlaceholder.content.fg = Colors.textDim;
+  artifactPlaceholder.fg = Colors.textDim;
 
   artifactPane.add(artifactPlaceholder);
   artifactContainer.add(artifactPane);
@@ -148,10 +153,10 @@ export function createLayout(renderer: CliRenderer): LayoutComponents {
   });
 
   const statusText = new TextRenderable(renderer, {
-    content: 'Datasets: 0 │ SANDBOX: NO NETWORK │ Ready',
+    content: 'Datasets: 0 | Ready',
     flexGrow: 1,
   });
-  statusText.content.fg = Colors.textDim;
+  statusText.fg = Colors.textDim;
 
   statusBar.add(statusText);
 
@@ -170,6 +175,7 @@ export function createLayout(renderer: CliRenderer): LayoutComponents {
     chatPane,
     chatInput,
     artifactPane,
+    artifactContainer,
     statusBar,
     statusText,
   };
@@ -180,7 +186,7 @@ export function addChatMessage(
   renderer: CliRenderer,
   role: 'user' | 'assistant',
   content: string
-): void {
+): BoxRenderable {
   const messageBox = new BoxRenderable(renderer, {
     width: '100%',
     flexDirection: 'column',
@@ -190,16 +196,231 @@ export function addChatMessage(
   const roleLabel = new TextRenderable(renderer, {
     content: role === 'user' ? 'You:' : 'Agent:',
   });
-  roleLabel.content.fg = role === 'user' ? Colors.user : Colors.assistant;
-  roleLabel.content.attributes = 1; // Bold
+  roleLabel.fg = role === 'user' ? Colors.user : Colors.assistant;
+  roleLabel.attributes = 1; // Bold
 
   const messageText = new TextRenderable(renderer, {
     content: content,
     width: '100%',
   });
-  messageText.content.fg = Colors.text;
+  messageText.fg = Colors.text;
 
   messageBox.add(roleLabel);
   messageBox.add(messageText);
   chatPane.add(messageBox);
+
+  return messageBox;
+}
+
+// Create a streaming message that can be appended to
+export interface StreamingMessage {
+  box: BoxRenderable;
+  textRef: TextRenderable;
+  currentContent: string;
+}
+
+export function createStreamingMessage(
+  chatPane: ScrollBoxRenderable,
+  renderer: CliRenderer
+): StreamingMessage {
+  const messageBox = new BoxRenderable(renderer, {
+    width: '100%',
+    flexDirection: 'column',
+    marginBottom: 1,
+  });
+
+  const roleLabel = new TextRenderable(renderer, {
+    content: 'Agent:',
+  });
+  roleLabel.fg = Colors.assistant;
+  roleLabel.attributes = 1; // Bold
+
+  const messageText = new TextRenderable(renderer, {
+    content: '',
+    width: '100%',
+  });
+  messageText.fg = Colors.text;
+
+  messageBox.add(roleLabel);
+  messageBox.add(messageText);
+  chatPane.add(messageBox);
+
+  return {
+    box: messageBox,
+    textRef: messageText,
+    currentContent: '',
+  };
+}
+
+export function appendToStreamingMessage(streamingMsg: StreamingMessage, content: string): void {
+  streamingMsg.currentContent += content;
+  streamingMsg.textRef.content = streamingMsg.currentContent;
+}
+
+// Tool execution indicator
+export function addToolIndicator(
+  chatPane: ScrollBoxRenderable,
+  renderer: CliRenderer,
+  toolName: string,
+  status: 'running' | 'success' | 'error',
+  verbose: boolean = false,
+  args?: Record<string, unknown>
+): BoxRenderable {
+  const indicatorBox = new BoxRenderable(renderer, {
+    width: '100%',
+    flexDirection: 'row',
+    marginBottom: 0,
+  });
+
+  const statusIcon = status === 'running' ? '\u25B6' : status === 'success' ? '\u2714' : '\u2718';
+  const statusColor =
+    status === 'running' ? Colors.toolRunning : status === 'success' ? Colors.success : Colors.error;
+
+  let indicatorText = `[${statusIcon} ${toolName}]`;
+  if (verbose && args) {
+    const argStr = JSON.stringify(args);
+    indicatorText += ` ${argStr.length > 50 ? argStr.slice(0, 47) + '...' : argStr}`;
+  }
+
+  const text = new TextRenderable(renderer, {
+    content: indicatorText,
+  });
+  text.fg = statusColor;
+
+  indicatorBox.add(text);
+  chatPane.add(indicatorBox);
+
+  return indicatorBox;
+}
+
+export function updateToolIndicator(
+  indicatorBox: BoxRenderable,
+  renderer: CliRenderer,
+  toolName: string,
+  status: 'success' | 'error'
+): void {
+  // Remove old content
+  const children = indicatorBox.getChildren();
+  for (const child of children) {
+    indicatorBox.remove(child.id);
+  }
+
+  const statusIcon = status === 'success' ? '\u2714' : '\u2718';
+  const statusColor = status === 'success' ? Colors.success : Colors.error;
+
+  const text = new TextRenderable(renderer, {
+    content: `[${statusIcon} ${toolName}]`,
+  });
+  text.fg = statusColor;
+
+  indicatorBox.add(text);
+}
+
+// Error message display
+export function addErrorMessage(
+  chatPane: ScrollBoxRenderable,
+  renderer: CliRenderer,
+  error: string
+): BoxRenderable {
+  const errorBox = new BoxRenderable(renderer, {
+    width: '100%',
+    flexDirection: 'column',
+    marginBottom: 1,
+  });
+
+  const errorLabel = new TextRenderable(renderer, {
+    content: 'Error:',
+  });
+  errorLabel.fg = Colors.error;
+  errorLabel.attributes = 1; // Bold
+
+  const errorText = new TextRenderable(renderer, {
+    content: error,
+    width: '100%',
+  });
+  errorText.fg = Colors.error;
+
+  errorBox.add(errorLabel);
+  errorBox.add(errorText);
+  chatPane.add(errorBox);
+
+  return errorBox;
+}
+
+// Status bar update
+export interface StatusInfo {
+  datasetCount: number;
+  artifactId?: string;
+  pageInfo?: string;
+  processing?: boolean;
+}
+
+export function updateStatusBar(statusText: TextRenderable, info: StatusInfo): void {
+  const parts: string[] = [];
+
+  parts.push(`Datasets: ${info.datasetCount}`);
+
+  if (info.artifactId) {
+    parts.push(`Artifact: ${info.artifactId}`);
+  }
+
+  if (info.pageInfo) {
+    parts.push(`Page: ${info.pageInfo}`);
+  }
+
+  if (info.processing) {
+    parts.push('Processing...');
+  } else {
+    parts.push('Ready');
+  }
+
+  statusText.content = parts.join(' | ');
+}
+
+// Update artifact pane title
+export function updateArtifactTitle(artifactContainer: BoxRenderable, title: string): void {
+  artifactContainer.title = ` ${title} `;
+}
+
+// Add markdown-formatted chat message (for assistant responses)
+export function addMarkdownChatMessage(
+  chatPane: ScrollBoxRenderable,
+  renderer: CliRenderer,
+  role: 'user' | 'assistant',
+  content: string
+): BoxRenderable {
+  const messageBox = new BoxRenderable(renderer, {
+    width: '100%',
+    flexDirection: 'column',
+    marginBottom: 1,
+  });
+
+  const roleLabel = new TextRenderable(renderer, {
+    content: role === 'user' ? 'You:' : 'Agent:',
+  });
+  roleLabel.fg = role === 'user' ? Colors.user : Colors.assistant;
+  roleLabel.attributes = 1; // Bold
+
+  messageBox.add(roleLabel);
+
+  // For assistant messages, render as markdown
+  if (role === 'assistant') {
+    const contentBox = new BoxRenderable(renderer, {
+      width: '100%',
+      flexDirection: 'column',
+      paddingLeft: 1,
+    });
+    renderMarkdown(renderer, contentBox, content, 50);
+    messageBox.add(contentBox);
+  } else {
+    const messageText = new TextRenderable(renderer, {
+      content: content,
+      width: '100%',
+    });
+    messageText.fg = Colors.text;
+    messageBox.add(messageText);
+  }
+
+  chatPane.add(messageBox);
+  return messageBox;
 }

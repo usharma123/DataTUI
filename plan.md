@@ -437,6 +437,10 @@
   ☒ Create scrollable text view for chat history
   ☒ Create OpenRouter LLM client with tool calling
   ☒ Define tool schemas (register_dataset, sql, etc.)
-  ☐ Implement DuckDB SQL engine
-  ☐ Create artifact store for tables/results
-  ☐ Build table rendering component with paging
+  ☒ Implement DuckDB SQL engine
+  ☒ Create artifact store for tables/results
+  ☒ Build table rendering component with paging
+  ☒ Create orchestrator to wire LLM, tools, and TUI together
+  ☒ Add streaming message support
+  ☒ Add tool execution indicators
+  ☒ Implement page navigation for tables

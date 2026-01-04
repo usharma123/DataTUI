@@ -33,6 +33,45 @@ export const RenderTableSchema = z.object({
   page_size: z.number().optional().default(20).describe('Rows per page'),
 });
 
+// Chart schemas
+export const BarChartSchema = z.object({
+  artifact_id: z.string().describe('ID of the table artifact containing the data'),
+  label_column: z.string().describe('Column name to use for labels (x-axis)'),
+  value_column: z.string().describe('Column name to use for values (y-axis)'),
+  title: z.string().optional().describe('Chart title'),
+  horizontal: z.boolean().optional().default(true).describe('Whether to render as horizontal bars (default: true)'),
+  limit: z.number().optional().default(10).describe('Maximum number of bars to show'),
+});
+
+export const LineChartSchema = z.object({
+  artifact_id: z.string().describe('ID of the table artifact containing the data'),
+  value_column: z.string().describe('Column name to use for values (y-axis)'),
+  label_column: z.string().optional().describe('Column name to use for x-axis labels'),
+  title: z.string().optional().describe('Chart title'),
+});
+
+export const HistogramSchema = z.object({
+  artifact_id: z.string().describe('ID of the table artifact containing the data'),
+  value_column: z.string().describe('Column name containing numeric values to bin'),
+  bins: z.number().optional().default(10).describe('Number of bins (default: 10)'),
+  title: z.string().optional().describe('Chart title'),
+});
+
+export const PieChartSchema = z.object({
+  artifact_id: z.string().describe('ID of the table artifact containing the data'),
+  label_column: z.string().describe('Column name to use for segment labels'),
+  value_column: z.string().describe('Column name to use for segment values'),
+  title: z.string().optional().describe('Chart title'),
+  limit: z.number().optional().default(8).describe('Maximum number of segments to show'),
+});
+
+export const ScatterPlotSchema = z.object({
+  artifact_id: z.string().describe('ID of the table artifact containing the data'),
+  x_column: z.string().describe('Column name for x-axis values'),
+  y_column: z.string().describe('Column name for y-axis values'),
+  title: z.string().optional().describe('Chart title'),
+});
+
 // Convert Zod schema to JSON Schema for OpenAI tools
 function zodToJsonSchema(schema: z.ZodObject<any>): Record<string, unknown> {
   const shape = schema.shape;
@@ -145,6 +184,51 @@ export const TOOL_DEFINITIONS: ChatCompletionTool[] = [
       parameters: zodToJsonSchema(ExportArtifactSchema),
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'bar_chart',
+      description:
+        'Create a bar chart visualization from a table artifact. Great for comparing values across categories.',
+      parameters: zodToJsonSchema(BarChartSchema),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'line_chart',
+      description:
+        'Create a line chart visualization from a table artifact. Great for showing trends over time or sequences.',
+      parameters: zodToJsonSchema(LineChartSchema),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'histogram',
+      description:
+        'Create a histogram showing the distribution of numeric values. Great for understanding data distribution.',
+      parameters: zodToJsonSchema(HistogramSchema),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'pie_chart',
+      description:
+        'Create a pie chart showing proportions. Great for showing parts of a whole.',
+      parameters: zodToJsonSchema(PieChartSchema),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'scatter_plot',
+      description:
+        'Create a scatter plot showing the relationship between two numeric columns. Great for correlation analysis.',
+      parameters: zodToJsonSchema(ScatterPlotSchema),
+    },
+  },
 ];
 
 // Type exports
@@ -153,3 +237,8 @@ export type DescribeDatasetInput = z.infer<typeof DescribeDatasetSchema>;
 export type SqlInput = z.infer<typeof SqlSchema>;
 export type ExportArtifactInput = z.infer<typeof ExportArtifactSchema>;
 export type RenderTableInput = z.infer<typeof RenderTableSchema>;
+export type BarChartInput = z.infer<typeof BarChartSchema>;
+export type LineChartInput = z.infer<typeof LineChartSchema>;
+export type HistogramInput = z.infer<typeof HistogramSchema>;
+export type PieChartInput = z.infer<typeof PieChartSchema>;
+export type ScatterPlotInput = z.infer<typeof ScatterPlotSchema>;
